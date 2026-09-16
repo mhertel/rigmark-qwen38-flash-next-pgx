@@ -37,6 +37,11 @@ benchmarked server is included for serving-configuration reproducibility. The
 RigMark JSON receipt remains the authoritative benchmark artifact; the recipe
 documents how the model server was configured and launched.
 
+## Additional benchmark comparison
+
+The original azampatti single-Spark sgbench harness was also run against this
+server. See [SGBENCH.md](SGBENCH.md) for all six passes and the comparison.
+
 ## RigMark result
 
 - Protocol: `1.1.0`
