@@ -1,0 +1,15 @@
+{
+  "hardware": "1x NVIDIA GB10 (Blackwell), 128 GB unified memory",
+  "topology": "TP=1, PP=1, single local GPU",
+  "negotiated_link_speed": "not applicable",
+  "model": "azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound",
+  "model_revision": "e4f732c0f817e3904a96ffadb3402522fb1a7b82",
+  "quantisation": "INT4 GPTQ-Marlin (group 128) weights; FP8 E4M3 attention/shared-expert projections; BF16 embeddings/routers/norms",
+  "kv_cache_dtype": "BF16",
+  "serving_engine": "vLLM 0.1.dev20073+g8e685d198",
+  "serving_image": "sha256:1eb74c6ef412a63da256f2f0f75fdb664cdb3ab0c529c9c0bc36fe5ce40dcebc",
+  "drafter": "MTP, 3 speculative tokens",
+  "context_limit": 262144,
+  "scheduler": "max_num_seqs=8, max_num_batched_tokens=8192, prefix_caching=enabled, chunked_prefill=enabled, kv_cache_memory=9g",
+  "competing_traffic": "none"
+}
