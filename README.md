@@ -30,6 +30,13 @@ have not been edited.
 - Chunked prefill enabled
 - No meaningful competing GPU traffic during the benchmark
 
+## Serving recipe
+
+The exact [Sparkrun recipe](recipe/0-qwen3.8-flash-a5b.yaml) used to launch the
+benchmarked server is included for serving-configuration reproducibility. The
+RigMark JSON receipt remains the authoritative benchmark artifact; the recipe
+documents how the model server was configured and launched.
+
 ## RigMark result
 
 - Protocol: `1.1.0`
