@@ -1,0 +1,89 @@
+recipe_version: "1"
+
+name: 0-qwen3.8-flash-a5b-v1
+description: vLLM serving azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound with InstantTensor loading on Lenovo PGX / DGX Spark GB10
+
+model: azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound
+
+solo_only: true
+container: qwen38-flash-next:v1
+container_name: qwen38-flash-next
+
+mods:
+  - mods/fix-qwen3.8-flash-chat-template
+
+args: {}
+
+defaults:
+  served_model_name: qwen3.8
+  port: 8000
+  host: 0.0.0.0
+  tensor_parallel: 1
+  gpu_memory_utilization: 0.01
+  max_model_len: 262144
+  max_num_batched_tokens: 8192
+  max_num_seqs: 8
+  kv_cache_memory: 9g
+  speculative_tokens: 3
+  temperature: 0.2
+
+env:
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+  VLLM_MARLIN_USE_ATOMIC_ADD: "1"
+  VLLM_FP8_HYBRID: "1"
+
+  VLLM_PLE_MMAP: "1"
+  VLLM_PLE_MMAP_WORKERS: "32"
+  VLLM_PLE_MMAP_PREWARM: "0"
+  VLLM_PLE_MMAP_PREFETCH: "0"
+  VLLM_PLE_MMAP_MADV_RANDOM: "0"
+
+  VLLM_USE_DEEP_GEMM: "0"
+  VLLM_USE_FLASHINFER_SAMPLER: "1"
+
+command: |
+  MODEL_DIR=$(find /root/.cache/huggingface/hub/models--azampatti--Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound/snapshots \
+    -mindepth 1 -maxdepth 1 -type d | head -n 1)
+
+  if [ -z "$MODEL_DIR" ]; then
+    echo "ERROR: A5B model snapshot not found in Hugging Face cache."
+    exit 1
+  fi
+
+  TABLE_DIR="$MODEL_DIR/ple-table"
+
+  if [ ! -d "$TABLE_DIR" ]; then
+    echo "ERROR: A5B PLE table not found at:"
+    echo "  $TABLE_DIR"
+    exit 1
+  fi
+
+  echo "Using model snapshot: $MODEL_DIR"
+  echo "Using PLE table: $TABLE_DIR"
+
+  export VLLM_PLE_MMAP_DIR="$TABLE_DIR"
+
+  vllm serve azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --tensor-parallel-size {tensor_parallel} \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --max-model-len {max_model_len} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --max-num-seqs {max_num_seqs} \
+    --kv-cache-memory-bytes {kv_cache_memory} \
+    --load-format instanttensor \
+    --trust-remote-code \
+    --enable-prefix-caching \
+    --enable-chunked-prefill \
+    --kv-cache-dtype auto \
+    --no-enable-flashinfer-autotune \
+    --chat-template fixed_chat_template.jinja \
+    --reasoning-parser qwen3 \
+    --tool-call-parser qwen3_coder \
+    --enable-auto-tool-choice \
+    --override-generation-config '{{"temperature":{temperature}}}' \
+    --compilation-config '{{"mode":3,"cudagraph_mode":"PIECEWISE","splitting_ops":["vllm::unified_attention_with_output","vllm::unified_mla_attention_with_output","vllm::mamba_mixer2","vllm::mamba_mixer","vllm::short_conv","vllm::qwen3_8_flash_next_ple_short_conv","vllm::qwen3_8_flash_next_qsa_with_output","vllm::linear_attention","vllm::qwen_gdn_attention_core","vllm::qwen_gdn_attention_core_fused_norm_packed","vllm::gdn_attention_core_xpu","vllm::olmo_hybrid_gdn_full_forward","vllm::sparse_attn_indexer","vllm::rocm_aiter_sparse_attn_indexer","vllm::deepseek_v4_attention","vllm::hpc_rope_norm_forward","vllm::ple_mmap_lookup"]}}' \
+    --speculative-config '{{"method":"mtp","num_speculative_tokens":{speculative_tokens}}}'

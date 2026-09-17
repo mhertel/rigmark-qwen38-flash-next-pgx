@@ -1,17 +1,11 @@
 # Qwen3.8 Flash Next on Lenovo PGX / NVIDIA DGX Spark
 
-This repository provides a reproducible serving setup for:
+A reproducible serving setup for **Qwen3.8 Flash Next** — INT4 AutoRound weights
+served by **vLLM** with **InstantTensor** loading — on a single **Lenovo PGX /
+NVIDIA DGX Spark (GB10)**, together with the validation and benchmark results
+that establish it.
 
-- Qwen3.8 Flash Next (`azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound`)
-- INT4 AutoRound quantisation
-- vLLM
-- InstantTensor
-- Lenovo PGX / NVIDIA DGX Spark (GB10)
-
-It also contains validation and benchmark results for that setup. RigMark is
-one of the benchmark tools used by this project, alongside sgbench. The RigMark
-JSON receipt and share card below are the original generated artifacts and have
-not been edited.
+Validation uses both RigMark and sgbench.
 
 ## Model
 
@@ -22,107 +16,111 @@ not been edited.
 
 ## Hardware
 
-- 1x NVIDIA GB10 (Blackwell)
-- 128 GB unified memory
-- Tensor parallelism: TP=1
-- Pipeline parallelism: PP=1
+- 1x NVIDIA GB10 (Blackwell), 128 GB unified memory
+- Tensor parallelism TP=1, pipeline parallelism PP=1
 
-## Serving configuration
+## Current image
 
-- vLLM `0.1.dev20073+g8e685d198`
-- MTP with 3 speculative tokens
-- 262144-token context
-- 9 GB KV cache
-- BF16 KV cache
-- Prefix caching enabled
-- Chunked prefill enabled
-- No meaningful competing GPU traffic during the benchmark
+`qwen38-flash-next:v1` —
+`sha256:320d1bcf0dc46f913cfa58a30b29131bb26fadb650d646bbf13b943a5e324156`
+
+A single consolidated build that replaces the historical three-stage chain. It
+pins the upstream source commit, the vLLM base digest, and the InstantTensor
+version, and applies eleven patches in one `docker build`.
+
+## Architecture
+
+```text
+container/   one docker build  ->  qwen38-flash-next:v1
+             (pinned vLLM base + 11 patches + InstantTensor)
+mods/        chat-template fix, applied at runtime — NOT baked into the image
+recipes/     Sparkrun recipe that launches the server
+benchmarks/  RigMark and sgbench results validating the setup
+docs/        provenance and validation evidence
+```
+
+The recipe and external chat template provide the runtime configuration used for
+the validated setup. Several custom features are activated by environment
+variables or command-line flags, while other compatibility fixes are built
+directly into the image.
+
+## Layout
+
+| Path | Contents |
+| --- | --- |
+| `container/` | `Dockerfile`, `build.sh`, `patches/`, build documentation |
+| `mods/fix-qwen3.8-flash-chat-template/` | external runtime chat-template mod |
+| `recipes/0-qwen3.8-flash-a5b.yaml` | current serving recipe for `qwen38-flash-next:v1` |
+| `recipes/historical/` | the recipe that launched the published historical run |
+| `benchmarks/` | RigMark and sgbench results, and how to read them |
+| `docs/provenance.md` | source chain, pinned digests, B12X status, attribution |
+| `docs/validation.md` | build, runtime, static, and RigMark validation evidence |
+
+## Container source
+
+`container/build.sh` stages the patch sources from the pinned upstream commit,
+verifies each staged file's SHA-256, runs one `docker build`, and then runs a
+14-check verification pass against the result. Details in
+[`container/README.md`](container/README.md).
 
 ## Serving recipe
 
-The exact [Sparkrun recipe](recipe/0-qwen3.8-flash-a5b.yaml) used to launch the
-benchmarked server is included for serving-configuration reproducibility. The
-RigMark JSON receipt remains the authoritative benchmark artifact; the recipe
-documents how the model server was configured and launched.
+[`recipes/0-qwen3.8-flash-a5b.yaml`](recipes/0-qwen3.8-flash-a5b.yaml) is the
+publishable recipe. It launches `qwen38-flash-next:v1` as container
+`qwen38-flash-next`, serving model `qwen3.8` on `0.0.0.0:8000` with TP=1, a
+262,144-token context, 8,192 max batched tokens, 8 max sequences, a 9 GB KV
+cache, MTP with 3 speculative tokens, InstantTensor loading, and the external
+chat template.
 
-## Additional benchmark comparison
+## Chat template
 
-The original azampatti single-Spark sgbench harness was also run against this
-server. See [SGBENCH.md](SGBENCH.md) for all six passes and the comparison.
-
-## RigMark result
-
-- Protocol: `1.1.0`
-- Reasoning effort: `none`
-- Basic output gates: **15/15 passed**
-
-| Measurement | Median | Range |
-| --- | ---: | ---: |
-| Code | 82.1 tok/s | 81.3–82.8 tok/s |
-| Prose | 44.9 tok/s | 44.4–45.9 tok/s |
-| Structured* | 86.5 tok/s | 84.3–87.0 tok/s |
-| 64K cold prefill | 2,483 tok/s | — |
-| 64K immediate replay | 46,636 tok/s | — |
-| C1 aggregate | 71.9 tok/s | — |
-| C2 aggregate | 114.7 tok/s | — |
-| C4 aggregate | 182.4 tok/s | — |
-
-*Structured output is RigMark's predictable-output / speculative-decoding ceiling and is not a proxy for coding-agent speed.
-
-## Basic gates versus code audit
-
-RigMark's basic output gate and `audit-code` measure different things.
-
-The **15/15 basic output gates passed** result means that all benchmark outputs
-completed and met RigMark's basic output requirements. It is not a claim that
-generated code is correct.
-
-The separate code audit replays each retained generated Go implementation with
-its own model-generated tests in RigMark's locked-down Go 1.25 environment.
-Only **1/5 model-supplied Go test suites passed**:
-
-1. **Run 1 — build failed.** `ratelimit.go:28:11: undefined: sync`. The
-   generated implementation uses `sync.Mutex` but does not import `sync`; no
-   tests ran.
-2. **Run 2 — build failed.** `ratelimit.go:29:11: undefined: sync`. The
-   generated implementation uses `sync.Mutex` but does not import `sync`; no
-   tests ran.
-3. **Run 3 — tests failed.** The first failure is
-   `ratelimit_test.go:117: AllowN(6) = false, want true` in
-   `TestAllowN/refill_capped`. The generated test gives the bucket capacity 5
-   and immediately requests 6 tokens, yet expects success. The same generated
-   suite also reports `AllowN(5) = false, want true` in `multiple_calls`: after
-   two successful 5-token withdrawals from capacity 10, it advances only one
-   second at one token per second and incorrectly expects another 5-token
-   withdrawal to succeed. The implementation and its generated tests disagree;
-   12 tests/subtests were started.
-4. **Run 4 — passed.** All 13 model-generated tests/subtests passed.
-5. **Run 5 — build failed.** `ratelimit.go:23:13: undefined: sync`. The
-   generated implementation uses `sync.Mutex` but does not import `sync`; no
-   tests ran.
-
-Generated code was not repaired or altered for this publication.
-
-## Benchmark command
-
-```bash
-./rigmark run \
-  --base-url http://localhost:8000 \
-  --model qwen3.8 \
-  --label qwen38-flash-next-int4-pgx-none-public \
-  --comparison-id qwen38-flash-next-pgx-20260915 \
-  --metadata metadata.json \
-  --extra-body '{"reasoning_effort":"none"}'
-```
-
-## Artifacts and integrity
-
-- [JSON receipt](results/qwen38-flash-next-int4-pgx-none-public-20260916T004709Z.json)
-- [Share card](results/qwen38-flash-next-int4-pgx-none-public-20260916T004709Z.card.txt)
-- [Run metadata](metadata.json)
-
-Full SHA-256 of the JSON receipt:
+The chat-template fix stays outside the image so it can be corrected without
+rebuilding or revalidating it:
 
 ```text
-74de0d6a135b5aee5f911746e1f0a30c83b0998ae8a610c5ca610c3ac12888ff
+mods/fix-qwen3.8-flash-chat-template/run.sh
+  -> copies chat_template.jinja to $WORKSPACE_DIR/fixed_chat_template.jinja
+recipes/0-qwen3.8-flash-a5b.yaml
+  -> --chat-template fixed_chat_template.jinja
 ```
+
+## Validation status
+
+- Build verification: **14/14 PASS**
+- Runtime smoke test: `qwen3.8` visible via `/v1/models`; `reasoning_effort: none`
+  returns `reasoning: null` and `reasoning_tokens = 0`
+- Static comparison against the historical image: 7,071 comparable files checked,
+  two permitted cosmetic source-tag differences, base first 32 layers
+  byte-identical
+- RigMark v1 warm run: **15/15 basic output gates passed**
+
+High-concurrency throughput is effectively unchanged from the historical run,
+while single-stream code and prose decode measured somewhat lower. No exact
+performance equivalence is claimed, and no throughput result here is offered as
+evidence about output quality.
+
+Full evidence: [`docs/validation.md`](docs/validation.md).
+
+## Benchmarks
+
+- [`benchmarks/README.md`](benchmarks/README.md) — how the two harnesses differ,
+  and how to reproduce a run
+- [`benchmarks/rigmark/v1/`](benchmarks/rigmark/v1/) — consolidated-image results
+- [`benchmarks/rigmark/historical/`](benchmarks/rigmark/historical/) — the
+  published historical result
+- [`benchmarks/sgbench/README.md`](benchmarks/sgbench/README.md) — sgbench passes
+
+## Build and use
+
+```bash
+# 1. Build and verify the consolidated image
+cd container && ./build.sh
+
+# 2. Apply the chat-template mod, then launch the server with
+#    recipes/0-qwen3.8-flash-a5b.yaml
+```
+
+## Provenance and attribution
+
+The source chain, pinned digests, the B12X status, and component attribution are
+in [`docs/provenance.md`](docs/provenance.md).

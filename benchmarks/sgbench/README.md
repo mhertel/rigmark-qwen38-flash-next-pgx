@@ -37,7 +37,7 @@ user-specific path is required.
 | Math | 42.7 tok/s |
 | LongCode | 43.6 tok/s |
 
-## Current vLLM single-stream passes
+## Historical image: six vLLM passes
 
 | Pass | Q&A | Code | JSON | Math | LongCode |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -60,6 +60,35 @@ original`.
 | Math | 42.7 tok/s | 62.70 tok/s | 58.1–66.6 tok/s | +46.8% |
 | LongCode | 43.6 tok/s | 55.50 tok/s | 47.4–61.8 tok/s | +27.3% |
 
+## Consolidated image (`qwen38-flash-next:v1`) passes
+
+The same unmodified sgbench script and the same prompts were run against the
+consolidated image, for six passes.
+
+| Pass | Q&A | Code | JSON | Math | LongCode |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 35.7 | 57.5 | 64.9 | 52.8 | 50.0 |
+| 2 | 54.4 | 67.1 | 73.8 | 60.9 | 65.9 |
+| 3 | 53.9 | 72.9 | 73.7 | 65.3 | 54.2 |
+| 4 | 48.0 | 71.3 | 73.6 | 62.7 | 59.6 |
+| 5 | 51.3 | 65.3 | 74.5 | 59.2 | 53.8 |
+| 6 | 54.8 | 71.2 | 76.2 | 60.3 | 54.0 |
+
+All values are tok/s. Medians use the same method as above.
+
+| Workload | Original | Six-run median | Range | Median improvement |
+| --- | ---: | ---: | ---: | ---: |
+| Q&A | 35.2 tok/s | 52.60 tok/s | 35.7–54.8 tok/s | +49.4% |
+| Code | 38.4 tok/s | 69.15 tok/s | 57.5–72.9 tok/s | +80.1% |
+| JSON | 43.9 tok/s | 73.75 tok/s | 64.9–76.2 tok/s | +68.0% |
+| Math | 42.7 tok/s | 60.60 tok/s | 52.8–65.3 tok/s | +41.9% |
+| LongCode | 43.6 tok/s | 54.10 tok/s | 50.0–65.9 tok/s | +24.1% |
+
+**Pass 1 shows additional cold / cache warm-up effects.** It is the lowest
+reading in every workload and is retained in the six-run summary for a
+consistent comparison with the historical six-pass results. The subsequent
+passes are more representative of warmed steady-state behavior.
+
 ## Interpretation
 
 - This compares the same single-GB10 class of hardware with the same sgbench
@@ -69,5 +98,9 @@ original`.
 - The cleanest workload comparison is Code: original **38.4 tok/s** versus the
   current six-run median of **71.45 tok/s** (**71.5 tok/s** rounded to one
   decimal).
+- The consolidated image (`qwen38-flash-next:v1`) was measured with the same
+  script and prompts, six passes, and is reported separately above.
+- Pass 1 of the consolidated-image runs shows additional cold / warm-up
+  effects; subsequent passes better represent warmed steady-state behavior.
 - This comparison does not prove better model quality.
 - Do not mix sgbench results with RigMark numbers because the harnesses differ.
