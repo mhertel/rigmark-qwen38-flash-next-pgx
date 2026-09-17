@@ -1,9 +1,17 @@
-# Qwen3.8 Flash Next INT4 on a Single NVIDIA GB10 / Lenovo PGX
+# Qwen3.8 Flash Next on Lenovo PGX / NVIDIA DGX Spark
 
-This repository contains a RigMark receipt and share card for
-`azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound` running on one NVIDIA
-GB10. The JSON receipt and text card are the original generated artifacts and
-have not been edited.
+This repository provides a reproducible serving setup for:
+
+- Qwen3.8 Flash Next (`azampatti/Qwen3.8-Flash-Next-125B-A5B-INT4-AutoRound`)
+- INT4 AutoRound quantisation
+- vLLM
+- InstantTensor
+- Lenovo PGX / NVIDIA DGX Spark (GB10)
+
+It also contains validation and benchmark results for that setup. RigMark is
+one of the benchmark tools used by this project, alongside sgbench. The RigMark
+JSON receipt and share card below are the original generated artifacts and have
+not been edited.
 
 ## Model
 
